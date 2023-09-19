@@ -1,11 +1,10 @@
-# v2ray-agent
+#  一键脚本快速安装
 
 - [感谢 JetBrains 提供的非商业开源软件开发授权](https://www.jetbrains.com/?from=v2ray-agent)
 - [Thanks for non-commercial open source development authorization by JetBrains](https://www.jetbrains.com/?from=v2ray-agent)
 
 - [English Version](https://github.com/mack-a/v2ray-agent/blob/master/documents/en/README_EN.md)
 - [VPS选购攻略，避坑指南](https://www.v2ray-agent.com/archives/1679975663984)
-- [Freevod 免费观影网站](https://share.freevod.org/)
 - [TG频道](https://t.me/v2rayAgentChannel)、[TG群组](https://t.me/technologyshare)、[官方网站](https://www.v2ray-agent.com/)
 - [RackNerd特价优质VPS深度评测](https://www.v2ray-agent.com/archives/1688973668640)
 
