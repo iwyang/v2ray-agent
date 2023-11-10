@@ -3157,14 +3157,14 @@ EOF
 
 # 初始化singbox route配置
 initSingBoxRouteConfig() {
+    downloadSingBoxGeositeDB
     local outboundTag=$1
     if [[ ! -f "${singBoxConfigPath}config/${outboundTag}_route.json" ]]; then
         cat <<EOF >"${singBoxConfigPath}config/${outboundTag}_route.json"
 {
     "route": {
         "geosite": {
-            "path": "${singBoxConfigPath}geosite.db",
-            "download_url": "https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite.db"
+            "path": "${singBoxConfigPath}geosite.db"
         },
         "rules": [
             {
@@ -3178,6 +3178,12 @@ initSingBoxRouteConfig() {
     }
 }
 EOF
+    fi
+}
+# 下载sing-box geosite db
+downloadSingBoxGeositeDB() {
+    if [[ ! -f "${singBoxConfigPath}geosite.db" ]]; then
+        wget -q -P "${singBoxConfigPath}" https://github.com/Johnshall/sing-geosite/releases/latest/download/geosite.db
     fi
 }
 
@@ -3239,11 +3245,25 @@ removeSingBoxRouteRule() {
 addSingBoxOutbound() {
     local tag=$1
     local type="ipv4"
+    local detour=$2
     if echo "${tag}" | grep -q "IPv6"; then
         type=ipv6
     fi
-
-    cat <<EOF >"${singBoxConfigPath}config/${tag}.json"
+    if [[ -n "${detour}" ]]; then
+        cat <<EOF >"${singBoxConfigPath}config/${tag}.json"
+{
+     "outbounds": [
+        {
+             "type": "direct",
+             "tag": "${tag}",
+             "detour": "${detour}",
+             "domain_strategy": "${type}_only"
+        }
+    ]
+}
+EOF
+    else
+        cat <<EOF >"${singBoxConfigPath}config/${tag}.json"
 {
      "outbounds": [
         {
@@ -3254,30 +3274,28 @@ addSingBoxOutbound() {
     ]
 }
 EOF
+    fi
 }
 
+# 移除sing-box出站
+removeSingBoxOutbound() {
+
+    local tag=$1
+    if [[ -f "${singBoxConfigPath}config/${tag}.json" ]]; then
+        rm "${singBoxConfigPath}config/${tag}.json"
+    fi
+
+}
 # 初始化wireguard出站信息
 addSingBoxWireGuardOut() {
     readConfigWarpReg
-
     cat <<EOF >"${singBoxConfigPath}config/wireguard_outbound.json"
 {
      "outbounds": [
-        {
-             "type": "direct",
-             "tag": "wireguard-out-IPv4",
-             "detour": "wireguard-out",
-             "domain_strategy": "ipv4_only"
-        },
-        {
-             "type": "direct",
-             "tag": "wireguard-out-IPv6",
-             "detour": "wireguard-out",
-             "domain_strategy": "ipv6_only"
-        },
+
         {
             "type": "wireguard",
-            "tag": "wireguard-out",
+            "tag": "wireguard_out",
             "server": "162.159.192.1",
             "server_port": 2408,
             "local_address": [
@@ -3479,18 +3497,18 @@ EOF
             "settings":{
                 "domainStrategy":"UseIPv4"
             },
-            "tag":"IPv4-out"
+            "tag":"IPv4_out"
         },
         {
             "protocol":"freedom",
             "settings":{
                 "domainStrategy":"UseIPv6"
             },
-            "tag":"IPv6-out"
+            "tag":"IPv6_out"
         },
         {
             "protocol":"blackhole",
-            "tag":"blackhole-out"
+            "tag":"blackhole_out"
         }
     ]
 }
@@ -3927,14 +3945,14 @@ EOF
             "settings":{
                 "domainStrategy":"UseIPv4"
             },
-            "tag":"IPv4-out"
+            "tag":"IPv4_out"
         },
         {
             "protocol":"freedom",
             "settings":{
                 "domainStrategy":"UseIPv6"
             },
-            "tag":"IPv6-out"
+            "tag":"IPv6_out"
         },
         {
             "protocol":"freedom",
@@ -3943,7 +3961,7 @@ EOF
         },
         {
             "protocol":"blackhole",
-            "tag":"blackhole-out"
+            "tag":"blackhole_out"
         }
     ]
 }
@@ -4622,7 +4640,7 @@ showAccounts() {
     local show
     # VLESS TCP
     if echo "${currentInstallProtocolType}" | grep -q trojan; then
-        echoContent skyBlue "===================== Trojan TCP TLS_Vision ======================\n"
+        echoContent skyBlue "===================== Trojan TCP TLS_Vision[不推荐] ======================\n"
         jq .inbounds[0].settings.clients ${configPath}02_trojan_TCP_inbounds.json | jq -c '.[]' | while read -r user; do
             local email=
             email=$(echo "${user}" | jq -r .email)
@@ -4645,7 +4663,7 @@ showAccounts() {
 
     # VLESS WS
     if echo ${currentInstallProtocolType} | grep -q 1; then
-        echoContent skyBlue "\n================================ VLESS WS TLS CDN ================================\n"
+        echoContent skyBlue "\n================================ VLESS WS TLS [仅CDN不推荐] ================================\n"
 
         jq .inbounds[0].settings.clients ${configPath}03_VLESS_WS_inbounds.json | jq -c '.[]' | while read -r user; do
             local email=
@@ -4667,7 +4685,7 @@ showAccounts() {
 
     # VLESS grpc
     if echo ${currentInstallProtocolType} | grep -q 5; then
-        echoContent skyBlue "\n=============================== VLESS gRPC TLS CDN ===============================\n"
+        echoContent skyBlue "\n=============================== VLESS gRPC TLS [仅CDN不推荐]  ===============================\n"
         jq .inbounds[0].settings.clients ${configPath}06_VLESS_gRPC_inbounds.json | jq -c '.[]' | while read -r user; do
 
             local email=
@@ -4688,7 +4706,7 @@ showAccounts() {
 
     # VMess WS
     if echo ${currentInstallProtocolType} | grep -q 3; then
-        echoContent skyBlue "\n================================ VMess WS TLS CDN ================================\n"
+        echoContent skyBlue "\n================================ VMess WS TLS [仅CDN不推荐]  ================================\n"
         local path="${currentPath}vws"
         if [[ ${coreInstallType} == "1" ]]; then
             path="${currentPath}vws"
@@ -4711,7 +4729,7 @@ showAccounts() {
 
     # trojan tcp
     if echo ${currentInstallProtocolType} | grep -q 4; then
-        echoContent skyBlue "\n==================================  Trojan TLS  ==================================\n"
+        echoContent skyBlue "\n==================================  Trojan TLS [不推荐] ==================================\n"
         jq .inbounds[0].settings.clients ${configPath}04_trojan_TCP_inbounds.json | jq -c '.[]' | while read -r user; do
             local email=
             email=$(echo "${user}" | jq -r .email)
@@ -4722,7 +4740,7 @@ showAccounts() {
     fi
 
     if echo ${currentInstallProtocolType} | grep -q 2; then
-        echoContent skyBlue "\n================================  Trojan gRPC TLS  ================================\n"
+        echoContent skyBlue "\n================================  Trojan gRPC TLS [仅CDN不推荐]  ================================\n"
         jq .inbounds[0].settings.clients ${configPath}04_trojan_gRPC_inbounds.json | jq -c '.[]' | while read -r user; do
             local email=
             email=$(echo "${user}" | jq -r .email)
@@ -4740,7 +4758,7 @@ showAccounts() {
         done
     fi
     if echo ${currentInstallProtocolType} | grep -q 6; then
-        echoContent skyBlue "\n================================  Hysteria TLS  ================================\n"
+        echoContent skyBlue "\n================================  Hysteria2 TLS [推荐] ================================\n"
         jq -r -c '.inbounds[]|select(.type=="hysteria2")|.users[]' "${singBoxConfigPath}config.json" | while read -r user; do
             echoContent skyBlue "\n ---> 账号:$(echo "${user}" | jq -r .name)"
             echo
@@ -4752,7 +4770,7 @@ showAccounts() {
     # VLESS reality vision
     if echo ${currentInstallProtocolType} | grep -q 7; then
         show=1
-        echoContent skyBlue "============================= VLESS reality_vision  ==============================\n"
+        echoContent skyBlue "============================= VLESS reality_vision [推荐]  ==============================\n"
         jq .inbounds[0].settings.clients ${configPath}07_VLESS_vision_reality_inbounds.json | jq -c '.[]' | while read -r user; do
             local email=
             email=$(echo "${user}" | jq -r .email)
@@ -4766,7 +4784,7 @@ showAccounts() {
     # VLESS reality
     if echo ${currentInstallProtocolType} | grep -q 8; then
         show=1
-        echoContent skyBlue "============================== VLESS reality_gRPC  ===============================\n"
+        echoContent skyBlue "============================== VLESS reality_gRPC [推荐] ===============================\n"
         jq .inbounds[0].settings.clients ${configPath}08_VLESS_reality_fallback_grpc_inbounds.json | jq -c '.[]' | while read -r user; do
             local email=
             email=$(echo "${user}" | jq -r .email)
@@ -4778,7 +4796,7 @@ showAccounts() {
     fi
     # tuic
     if echo ${currentInstallProtocolType} | grep -q 9; then
-        echoContent skyBlue "\n================================  Tuic TLS  ================================\n"
+        echoContent skyBlue "\n================================  Tuic TLS [推荐]  ================================\n"
         jq -r -c '.inbounds[]|select(.type=="tuic")|.users[]' "${singBoxConfigPath}config.json" | while read -r user; do
             echoContent skyBlue "\n ---> 账号:$(echo "${user}" | jq -r .name)"
             echo
@@ -5741,7 +5759,7 @@ ipv6Routing() {
     read -r -p "请选择:" ipv6Status
     if [[ "${ipv6Status}" == "1" ]]; then
 
-        jq -r -c '.routing.rules[]|select (.outboundTag=="IPv6-out")|.domain' ${configPath}09_routing.json | jq -r
+        jq -r -c '.routing.rules[]|select (.outboundTag=="IPv6_out")|.domain' ${configPath}09_routing.json | jq -r
         exit 0
     elif [[ "${ipv6Status}" == "2" ]]; then
         echoContent red "=============================================================="
@@ -5750,21 +5768,21 @@ ipv6Routing() {
         echoContent yellow "# 使用教程：https://www.v2ray-agent.com/archives/ba-he-yi-jiao-ben-yu-ming-fen-liu-jiao-cheng \n"
 
         read -r -p "请按照上面示例录入域名:" domainList
-        addInstallRouting IPv6-out outboundTag "${domainList}"
+        addInstallRouting IPv6_out outboundTag "${domainList}"
 
-        unInstallOutbounds IPv6-out
+        unInstallOutbounds IPv6_out
 
-        outbounds=$(jq -r '.outbounds += [{"protocol":"freedom","settings":{"domainStrategy":"UseIPv6"},"tag":"IPv6-out"}]' ${configPath}10_ipv4_outbounds.json)
+        outbounds=$(jq -r '.outbounds += [{"protocol":"freedom","settings":{"domainStrategy":"UseIPv6"},"tag":"IPv6_out"}]' ${configPath}10_ipv4_outbounds.json)
 
         echo "${outbounds}" | jq . >${configPath}10_ipv4_outbounds.json
 
-        configurationSingBoxRoute add IPv6-out "${domainList}"
+        configurationSingBoxRoute add IPv6_out "${domainList}"
         addSingBoxOutbound IPv6_out
+        addSingBoxOutbound IPv4_out
         echoContent green " ---> 添加成功"
 
     elif [[ "${ipv6Status}" == "3" ]]; then
-        echoContent green " ---> 不可用"
-        exit 0
+
         echoContent red "=============================================================="
         echoContent yellow "# 注意事项\n"
         echoContent yellow "1.会删除设置的所有分流规则"
@@ -5780,13 +5798,22 @@ ipv6Routing() {
                         "settings":{
                             "domainStrategy":"UseIPv6"
                         },
-                        "tag":"IPv6-out"
+                        "tag":"IPv6_out"
                     }
                 ]
             }
 EOF
             rm ${configPath}09_routing.json >/dev/null 2>&1
             echoContent green " ---> IPv6全局出站设置成功"
+
+            configurationSingBoxRoute delete wireguard_out_IPv4
+            configurationSingBoxRoute delete wireguard_out_IPv6
+            removeSingBoxOutbound IPv4_out
+            removeSingBoxOutbound wireguard_out_IPv4
+            removeSingBoxOutbound wireguard_outbound
+
+            addSingBoxOutbound IPv6_out
+
         else
             echoContent green " ---> 放弃设置"
             exit 0
@@ -5794,14 +5821,14 @@ EOF
 
     elif [[ "${ipv6Status}" == "4" ]]; then
 
-        unInstallRouting IPv6-out outboundTag
+        unInstallRouting IPv6_out outboundTag
 
-        unInstallOutbounds IPv6-out
+        unInstallOutbounds IPv6_out
 
-        configurationSingBoxRoute delete IPv6-out
+        configurationSingBoxRoute delete IPv6_out
 
-        if ! grep -q "IPv4-out" <"${configPath}10_ipv4_outbounds.json"; then
-            outbounds=$(jq -r '.outbounds += [{"protocol":"freedom","settings": {"domainStrategy": "UseIPv4"},"tag":"IPv4-out"}]' ${configPath}10_ipv4_outbounds.json)
+        if ! grep -q "IPv4_out" <"${configPath}10_ipv4_outbounds.json"; then
+            outbounds=$(jq -r '.outbounds += [{"protocol":"freedom","settings": {"domainStrategy": "UseIPv4"},"tag":"IPv4_out"}]' ${configPath}10_ipv4_outbounds.json)
 
             echo "${outbounds}" | jq . >${configPath}10_ipv4_outbounds.json
         fi
@@ -5839,9 +5866,9 @@ btTools() {
 
         if [[ -f "${configPath}09_routing.json" ]]; then
 
-            unInstallRouting blackhole-out outboundTag
+            unInstallRouting blackhole_out outboundTag
 
-            routing=$(jq -r '.routing.rules += [{"type":"field","outboundTag":"blackhole-out","protocol":["bittorrent"]}]' ${configPath}09_routing.json)
+            routing=$(jq -r '.routing.rules += [{"type":"field","outboundTag":"blackhole_out","protocol":["bittorrent"]}]' ${configPath}09_routing.json)
 
             echo "${routing}" | jq . >${configPath}09_routing.json
 
@@ -5853,7 +5880,7 @@ btTools() {
         "rules": [
           {
             "type": "field",
-            "outboundTag": "blackhole-out",
+            "outboundTag": "blackhole_out",
             "protocol": [ "bittorrent" ]
           }
         ]
@@ -5864,9 +5891,9 @@ EOF
 
         installSniffing
 
-        unInstallOutbounds blackhole-out
+        unInstallOutbounds blackhole_out
 
-        outbounds=$(jq -r '.outbounds += [{"protocol":"blackhole","tag":"blackhole-out"}]' ${configPath}10_ipv4_outbounds.json)
+        outbounds=$(jq -r '.outbounds += [{"protocol":"blackhole","tag":"blackhole_out"}]' ${configPath}10_ipv4_outbounds.json)
 
         echo "${outbounds}" | jq . >${configPath}10_ipv4_outbounds.json
 
@@ -5876,9 +5903,9 @@ EOF
 
         unInstallSniffing
 
-        unInstallRouting blackhole-out outboundTag bittorrent
+        unInstallRouting blackhole_out outboundTag bittorrent
 
-        #		unInstallOutbounds blackhole-out
+        #		unInstallOutbounds blackhole_out
 
         echoContent green " ---> BT下载打开成功"
     else
@@ -5907,7 +5934,7 @@ blacklist() {
 
     read -r -p "请选择:" blacklistStatus
     if [[ "${blacklistStatus}" == "1" ]]; then
-        jq -r -c '.routing.rules[]|select (.outboundTag=="blackhole-out")|.domain' ${configPath}09_routing.json | jq -r
+        jq -r -c '.routing.rules[]|select (.outboundTag=="blackhole_out")|.domain' ${configPath}09_routing.json | jq -r
         exit 0
     elif [[ "${blacklistStatus}" == "2" ]]; then
         echoContent red "=============================================================="
@@ -5920,22 +5947,22 @@ blacklist() {
         read -r -p "请按照上面示例录入域名:" domainList
 
         if [[ -f "${configPath}09_routing.json" ]]; then
-            addInstallRouting blackhole-out outboundTag "${domainList}"
+            addInstallRouting blackhole_out outboundTag "${domainList}"
         fi
-        unInstallOutbounds blackhole-out
+        unInstallOutbounds blackhole_out
 
-        outbounds=$(jq -r '.outbounds += [{"protocol":"blackhole","tag":"blackhole-out"}]' ${configPath}10_ipv4_outbounds.json)
+        outbounds=$(jq -r '.outbounds += [{"protocol":"blackhole","tag":"blackhole_out"}]' ${configPath}10_ipv4_outbounds.json)
 
         echo "${outbounds}" | jq . >${configPath}10_ipv4_outbounds.json
 
         echoContent green " ---> 添加成功"
 
     elif [[ "${blacklistStatus}" == "3" ]]; then
-        addInstallRouting blackhole-out outboundTag "cn"
+        addInstallRouting blackhole_out outboundTag "cn"
 
-        unInstallOutbounds blackhole-out
+        unInstallOutbounds blackhole_out
 
-        outbounds=$(jq -r '.outbounds += [{"protocol":"blackhole","tag":"blackhole-out"}]' ${configPath}10_ipv4_outbounds.json)
+        outbounds=$(jq -r '.outbounds += [{"protocol":"blackhole","tag":"blackhole_out"}]' ${configPath}10_ipv4_outbounds.json)
 
         echo "${outbounds}" | jq . >${configPath}10_ipv4_outbounds.json
 
@@ -5943,7 +5970,7 @@ blacklist() {
 
     elif [[ "${blacklistStatus}" == "4" ]]; then
 
-        unInstallRouting blackhole-out outboundTag
+        unInstallRouting blackhole_out outboundTag
 
         echoContent green " ---> 域名黑名单删除成功"
     else
@@ -6010,7 +6037,7 @@ EOF
     done < <(echo "${domain}" | tr ',' '\n')
 
     unInstallRouting "${tag}" "${type}"
-    if ! grep -q "gstatic.com" ${configPath}09_routing.json && [[ "${tag}" == "blackhole-out" ]]; then
+    if ! grep -q "gstatic.com" ${configPath}09_routing.json && [[ "${tag}" == "blackhole_out" ]]; then
         local routing=
         routing=$(jq -r ".routing.rules += [{\"type\": \"field\",\"domain\": [\"gstatic.com\"],\"outboundTag\": \"direct\"}]" ${configPath}09_routing.json)
         echo "${routing}" | jq . >${configPath}09_routing.json
@@ -6175,8 +6202,8 @@ EOF
 
         unInstallOutbounds warp-socks-out
 
-        if ! grep -q "IPv4-out" <"${configPath}10_ipv4_outbounds.json"; then
-            outbounds=$(jq -r '.outbounds += [{"protocol":"freedom","settings": {"domainStrategy": "UseIPv4"},"tag":"IPv4-out"}]' ${configPath}10_ipv4_outbounds.json)
+        if ! grep -q "IPv4_out" <"${configPath}10_ipv4_outbounds.json"; then
+            outbounds=$(jq -r '.outbounds += [{"protocol":"freedom","settings": {"domainStrategy": "UseIPv4"},"tag":"IPv4_out"}]' ${configPath}10_ipv4_outbounds.json)
 
             echo "${outbounds}" | jq . >${configPath}10_ipv4_outbounds.json
         fi
@@ -6230,7 +6257,7 @@ installWarpReg() {
 showWireGuardDomain() {
     # todo
     # xray
-    jq -r -c '.routing.rules[]|select (.outboundTag=="wireguard-out-'"${type}"'")|.domain' ${configPath}09_routing.json | jq -r
+    jq -r -c '.routing.rules[]|select (.outboundTag=="wireguard_out_'"${type}"'")|.domain' ${configPath}09_routing.json | jq -r
     # sing-box
 }
 
@@ -6242,10 +6269,10 @@ addWireGuardRoute() {
     # xray
     if [[ -n "${configPath}" ]]; then
 
-        addInstallRouting wireguard-out-"${type}" "${tag}" "${domainList}"
-        unInstallOutbounds wireguard-out-"${type}"
+        addInstallRouting wireguard_out_"${type}" "${tag}" "${domainList}"
+        unInstallOutbounds wireguard_out_"${type}"
         local outbounds
-        outbounds=$(jq -r '.outbounds += [{"protocol":"wireguard","settings":{"secretKey":"'"${secretKeyWarpReg}"'","address":["'"${address}"'"],"peers":[{"publicKey":"'"${publicKeyWarpReg}"'","allowedIPs":["0.0.0.0/0","::/0"],"endpoint":"162.159.192.1:2408"}],"reserved":'"${reservedWarpReg}"',"mtu":1280},"tag":"wireguard-out-'"${type}"'"}]' ${configPath}10_ipv4_outbounds.json)
+        outbounds=$(jq -r '.outbounds += [{"protocol":"wireguard","settings":{"secretKey":"'"${secretKeyWarpReg}"'","address":["'"${address}"'"],"peers":[{"publicKey":"'"${publicKeyWarpReg}"'","allowedIPs":["0.0.0.0/0","::/0"],"endpoint":"162.159.192.1:2408"}],"reserved":'"${reservedWarpReg}"',"mtu":1280},"tag":"wireguard_out_'"${type}"'"}]' ${configPath}10_ipv4_outbounds.json)
 
         echo "${outbounds}" | jq . >${configPath}10_ipv4_outbounds.json
     fi
@@ -6253,7 +6280,8 @@ addWireGuardRoute() {
     if [[ -n "${singBoxConfigPath}" ]]; then
 
         # rule
-        addSingBoxRouteRule "wireguard-out-${type}" "${domainList}"
+        addSingBoxRouteRule "wireguard_out_${type}" "${domainList}"
+        addSingBoxOutbound "wireguard_out_${type}" "wireguard_out"
         # outbound
         addSingBoxWireGuardOut
     fi
@@ -6265,18 +6293,18 @@ unInstallWireGuard() {
     if [[ -n "${configPath}" ]]; then
 
         if [[ "${type}" == "IPv4" ]]; then
-            if ! grep -q "wireguard-out-IPv6" <${configPath}10_ipv4_outbounds.json; then
+            if ! grep -q "wireguard_out_IPv6" <${configPath}10_ipv4_outbounds.json; then
                 rm -rf /etc/v2ray-agent/warp/config >/dev/null 2>&1
             fi
         elif [[ "${type}" == "IPv6" ]]; then
-            if ! grep -q "wireguard-out-IPv4" <${configPath}10_ipv4_outbounds.json; then
+            if ! grep -q "wireguard_out_IPv4" <${configPath}10_ipv4_outbounds.json; then
                 rm -rf /etc/v2ray-agent/warp/config >/dev/null 2>&1
             fi
         fi
     fi
 
     if [[ -n "${singBoxConfigPath}" ]]; then
-        if [[ ! -f "${singBoxConfigPath}config/wireguard-out-IPv6_route.json" && ! -f "${singBoxConfigPath}config/wireguard-out-IPv4_route.json" ]]; then
+        if [[ ! -f "${singBoxConfigPath}config/wireguard_out_IPv6_route.json" && ! -f "${singBoxConfigPath}config/wireguard_out_IPv4_route.json" ]]; then
             rm ${singBoxConfigPath}config/wireguard_outbound.json >/dev/null 2>&1
             rm -rf /etc/v2ray-agent/warp/config >/dev/null 2>&1
         fi
@@ -6289,11 +6317,11 @@ removeWireGuardRoute() {
     # xray
     if [[ -n "${configPath}" ]]; then
 
-        unInstallRouting wireguard-out-"${type}" outboundTag
+        unInstallRouting wireguard_out_"${type}" outboundTag
 
-        unInstallOutbounds wireguard-out-"${type}"
+        unInstallOutbounds wireguard_out_"${type}"
 
-        if ! grep -q "IPv4-out" <"${configPath}10_ipv4_outbounds.json"; then
+        if ! grep -q "IPv4_out" <"${configPath}10_ipv4_outbounds.json"; then
 
             cat <<EOF >${configPath}10_ipv4_outbounds.json
 {
@@ -6303,18 +6331,18 @@ removeWireGuardRoute() {
             "settings":{
                 "domainStrategy":"UseIPv4"
             },
-            "tag":"IPv4-out"
+            "tag":"IPv4_out"
         },
         {
             "protocol":"freedom",
             "settings":{
                 "domainStrategy":"UseIPv6"
             },
-            "tag":"IPv6-out"
+            "tag":"IPv6_out"
         },
         {
             "protocol":"blackhole",
-            "tag":"blackhole-out"
+            "tag":"blackhole_out"
         }
     ]
 }
@@ -6326,7 +6354,7 @@ EOF
 
     # sing-box
     if [[ -n "${singBoxConfigPath}" ]]; then
-        removeSingBoxRouteRule "wireguard-out-${type}"
+        removeSingBoxRouteRule "wireguard_out_${type}"
     fi
 
     unInstallWireGuard "${type}"
@@ -6364,20 +6392,10 @@ warpRoutingReg() {
 
         read -r -p "请按照上面示例录入域名:" domainList
         addWireGuardRoute "${type}" outboundTag "${domainList}"
-
-        #        unInstallOutbounds wireguard-out-"${type}"
-
-        #        local outbounds
-        #        outbounds=$(jq -r '.outbounds += [{"protocol":"wireguard","settings":{"secretKey":"'"${secretKeyWarpReg}"'","address":["'"${address}"'"],"peers":[{"publicKey":"'"${publicKeyWarpReg}"'","allowedIPs":["0.0.0.0/0","::/0"],"endpoint":"162.159.192.1:2408"}],"reserved":'"${reservedWarpReg}"',"mtu":1280},"tag":"wireguard-out-'"${type}"'"}]' ${configPath}10_ipv4_outbounds.json)
-        #
-        #        echo "${outbounds}" | jq . >${configPath}10_ipv4_outbounds.json
-
         echoContent green " ---> 添加成功"
 
     elif [[ "${warpStatus}" == "3" ]]; then
 
-        echoContent green " ---> 不可用"
-        exit 0
         echoContent red "=============================================================="
         echoContent yellow "# 注意事项\n"
         echoContent yellow "1.会删除设置的所有分流规则"
@@ -6410,12 +6428,29 @@ warpRoutingReg() {
                 "reserved": ${reservedWarpReg},
                 "mtu": 1280
             },
-            "tag": "wireguard-out-${type}"
+            "tag": "wireguard_out_${type}"
         }
     ]
 }
 EOF
             rm ${configPath}09_routing.json >/dev/null 2>&1
+
+            configurationSingBoxRoute delete IPv4
+            configurationSingBoxRoute delete IPv6
+            removeSingBoxOutbound IPv4_out
+            removeSingBoxOutbound IPv6_out
+
+            if [[ "${type}" == "IPv4" ]]; then
+                configurationSingBoxRoute delete wireguard_out_IPv6
+                removeSingBoxOutbound wireguard_out_IPv6
+            else
+                configurationSingBoxRoute delete wireguard_out_IPv4
+                removeSingBoxOutbound wireguard_out_IPv4
+            fi
+
+            # outbound
+            addSingBoxOutbound "wireguard_out_${type}" "wireguard_out"
+            addSingBoxWireGuardOut
             echoContent green " ---> WARP全局出站设置成功"
         else
             echoContent green " ---> 放弃设置"
@@ -6695,7 +6730,7 @@ EOF
             unInstallRouting dokodemoDoor-443 inboundTag
 
             local routing
-            routing=$(jq -r ".routing.rules += [{\"source\":[\"${setIPs//,/\",\"}\"],\"domains\":${domains},\"type\":\"field\",\"inboundTag\":[\"dokodemoDoor-80\",\"dokodemoDoor-443\"],\"outboundTag\":\"direct\"},{\"type\":\"field\",\"inboundTag\":[\"dokodemoDoor-80\",\"dokodemoDoor-443\"],\"outboundTag\":\"blackhole-out\"}]" ${configPath}09_routing.json)
+            routing=$(jq -r ".routing.rules += [{\"source\":[\"${setIPs//,/\",\"}\"],\"domains\":${domains},\"type\":\"field\",\"inboundTag\":[\"dokodemoDoor-80\",\"dokodemoDoor-443\"],\"outboundTag\":\"direct\"},{\"type\":\"field\",\"inboundTag\":[\"dokodemoDoor-80\",\"dokodemoDoor-443\"],\"outboundTag\":\"blackhole_out\"}]" ${configPath}09_routing.json)
             echo "${routing}" | jq . >${configPath}09_routing.json
         else
 
@@ -6721,7 +6756,7 @@ EOF
           "dokodemoDoor-80",
           "dokodemoDoor-443"
         ],
-        "outboundTag": "blackhole-out"
+        "outboundTag": "blackhole_out"
       }
     ]
   }
@@ -7043,13 +7078,13 @@ customXrayInstall() {
     echoContent skyBlue "\n========================个性化安装============================"
     echoContent yellow "VLESS前置，默认安装0，如果只需要安装0，则只选择0即可"
     echoContent yellow "0.VLESS+TLS_Vision+TCP[推荐]"
-    echoContent yellow "1.VLESS+TLS+WS[CDN]"
-    echoContent yellow "2.Trojan+TLS+gRPC[CDN]"
-    echoContent yellow "3.VMess+TLS+WS[CDN]"
-    echoContent yellow "4.Trojan+TLS"
-    echoContent yellow "5.VLESS+TLS+gRPC[CDN]"
+    echoContent yellow "1.VLESS+TLS+WS[仅CDN推荐]"
+    echoContent yellow "2.Trojan+TLS+gRPC[仅CDN推荐]"
+    echoContent yellow "3.VMess+TLS+WS[仅CDN推荐]"
+    echoContent yellow "4.Trojan+TLS[不推荐]"
+    echoContent yellow "5.VLESS+TLS+gRPC[仅CDN推荐]"
     echoContent yellow "7.VLESS+Reality+uTLS+Vision[推荐]"
-    #    echoContent yellow "8.VLESS+Reality+gRPC"
+    # echoContent yellow "8.VLESS+Reality+gRPC"
     read -r -p "请选择[多选]，[例如:123]:" selectCustomInstallType
     echoContent skyBlue "--------------------------------------------------------------"
     if [[ -z ${selectCustomInstallType} ]]; then
@@ -8353,6 +8388,9 @@ singBoxVersionManageMenu() {
         handleSingBox start
     elif [[ "${selectTuicType}" == "5" ]]; then
         singBoxLog ${logStatus}
+        if [[ "${logStatus}" == "false" ]]; then
+            tail -f "${singBoxConfigPath}../box.log"
+        fi
     elif [[ "${selectTuicType}" == "6" ]]; then
         tail -f "${singBoxConfigPath}../box.log"
     fi
@@ -8391,7 +8429,7 @@ menu() {
     cd "$HOME" || exit
     echoContent red "\n=============================================================="
     echoContent green "作者：mack-a"
-    echoContent green "当前版本：v2.11.8"
+    echoContent green "当前版本：v2.11.10"
     echoContent green "Github：https://github.com/mack-a/v2ray-agent"
     echoContent green "描述：八合一共存脚本\c"
     showInstallStatus
