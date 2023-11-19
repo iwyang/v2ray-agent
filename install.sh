@@ -2149,12 +2149,11 @@ xrayVersionManageMenu() {
     echoContent red "=============================================================="
     read -r -p "请选择:" selectXrayType
     if [[ "${selectXrayType}" == "1" ]]; then
+        prereleaseStatus=false
         updateXray
     elif [[ "${selectXrayType}" == "2" ]]; then
-
         prereleaseStatus=true
         updateXray
-
     elif [[ "${selectXrayType}" == "3" ]]; then
         echoContent yellow "\n1.只可以回退最近的五个版本"
         echoContent yellow "2.不保证回退后一定可以正常使用"
@@ -2281,7 +2280,7 @@ updateXray() {
         if [[ -n "$1" ]]; then
             version=$1
         else
-            version=$(curl -s "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=1" | jq -r ".[]|select (.prerelease==${prereleaseStatus})|.tag_name")
+            version=$(curl -s "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=5" | jq -r ".[]|select (.prerelease==${prereleaseStatus})|.tag_name" | head -1)
         fi
 
         echoContent green " ---> Xray-core版本:${version}"
@@ -2299,7 +2298,7 @@ updateXray() {
         if [[ -n "$1" ]]; then
             version=$1
         else
-            version=$(curl -s "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=1" | jq -r ".[].tag_name")
+            version=$(curl -s "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=5" | jq -r ".[]|select (.prerelease==${prereleaseStatus})|.tag_name" | head -1)
         fi
 
         if [[ -n "$1" ]]; then
@@ -3225,8 +3224,10 @@ addSingBoxRouteRule() {
 removeSingBoxRouteRule() {
     local outboundTag=$1
     local delRules
-    delRules=$(jq -r 'del(.route.rules[]|select(.outbound=="'"${outboundTag}"'"))' "${singBoxConfigPath}config/${outboundTag}_route.json")
-    echo "${delRules}" >"${singBoxConfigPath}config/${outboundTag}_route.json"
+    if [[ -f "${singBoxConfigPath}config/${outboundTag}_route.json" ]]; then
+        delRules=$(jq -r 'del(.route.rules[]|select(.outbound=="'"${outboundTag}"'"))' "${singBoxConfigPath}config/${outboundTag}_route.json")
+        echo "${delRules}" >"${singBoxConfigPath}config/${outboundTag}_route.json"
+    fi
 }
 
 # 添加sing-box出站
@@ -4587,6 +4588,11 @@ EOF
         echoContent yellow " ---> 二维码 VLESS(VLESS+reality+uTLS+gRPC)"
         echoContent green "    https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=vless%3A%2F%2F${id}%40$(getPublicIP)%3A${currentRealityPort}%3Fencryption%3Dnone%26security%3Dreality%26type%3Dgrpc%26sni%3D${currentRealityServerNames}%26fp%3Dchrome%26pbk%3D${currentRealityPublicKey}%26pbk%3D6ba85179e30d4fc2%26path%3Dgrpc%26serviceName%3Dgrpc%23${email}\n"
     elif [[ "${type}" == "tuic" ]]; then
+        local tuicUUID=
+        tuicUUID=$(echo "${id}" | awk -F "[_]" '{print $1}')
+
+        local tuicPassword=
+        tuicPassword=$(echo "${id}" | awk -F "[_]" '{print $2}')
 
         if [[ -z "${email}" ]]; then
             echoContent red " ---> 读取配置失败，请重新安装"
@@ -4594,21 +4600,21 @@ EOF
         fi
 
         echoContent yellow " ---> 格式化明文(Tuic+TLS)"
-        echoContent green "    协议类型:Tuic，地址:${currentHost}，端口：${tuicPort}，uuid：${id}，password：${id}，congestion-controller:${tuicAlgorithm}，alpn: h3，账户名:${email}\n"
+        echoContent green "    协议类型:Tuic，地址:${currentHost}，端口：${tuicPort}，uuid：${tuicUUID}，password：${tuicPassword}，congestion-controller:${tuicAlgorithm}，alpn: h3，账户名:${email}\n"
 
         cat <<EOF >>"/etc/v2ray-agent/subscribe_local/default/${user}"
-tuic://${id}:${id}@${currentHost}:${tuicPort}?congestion_control=${tuicAlgorithm}&alpn=h3&sni=${currentHost}&udp_relay_mode=quic&allow_insecure=0#${email}
+tuic://${tuicUUID}:${tuicPassword}@${currentHost}:${tuicPort}?congestion_control=${tuicAlgorithm}&alpn=h3&sni=${currentHost}&udp_relay_mode=quic&allow_insecure=0#${email}
 EOF
         echoContent yellow " ---> v2rayN(Tuic+TLS)"
-        echo "{\"relay\": {\"server\": \"${currentHost}:${tuicPort}\",\"uuid\": \"${id}\",\"password\": \"${id}\",\"ip\": \"$(getPublicIP 4)\",\"congestion_control\": \"${tuicAlgorithm}\",\"alpn\": [\"h3\"]},\"local\": {\"server\": \"127.0.0.1:7798\"},\"log_level\": \"warn\"}" | jq
+        echo "{\"relay\": {\"server\": \"${currentHost}:${tuicPort}\",\"uuid\": \"${tuicUUID}\",\"password\": \"${tuicPassword}\",\"ip\": \"$(getPublicIP 4)\",\"congestion_control\": \"${tuicAlgorithm}\",\"alpn\": [\"h3\"]},\"local\": {\"server\": \"127.0.0.1:7798\"},\"log_level\": \"warn\"}" | jq
 
         cat <<EOF >>"/etc/v2ray-agent/subscribe_local/clashMeta/${user}"
   - name: "${email}"
     server: ${currentHost}
     type: tuic
     port: ${tuicPort}
-    uuid: ${id}
-    password: ${id}
+    uuid: ${tuicUUID}
+    password: ${tuicPassword}
     alpn:
      - h3
     congestion-controller: ${tuicAlgorithm}
@@ -4617,7 +4623,7 @@ EOF
     sni: ${email}
 EOF
         echoContent yellow "\n ---> 二维码 Tuic"
-        echoContent green "    https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=tuic%3A%2F%2F${id}%3A${id}%40${currentHost}%3A${tuicPort}%3Fcongestion_control%3D${tuicAlgorithm}%26alpn%3Dh3%26sni%3D${currentHost}%26udp_relay_mode%3Dquic%26allow_insecure%3D0%23${email}\n"
+        echoContent green "    https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=tuic%3A%2F%2F${tuicUUID}%3A${tuicPassword}%40${currentHost}%3A${tuicPort}%3Fcongestion_control%3D${tuicAlgorithm}%26alpn%3Dh3%26sni%3D${currentHost}%26udp_relay_mode%3Dquic%26allow_insecure%3D0%23${email}\n"
     fi
 
 }
@@ -4797,7 +4803,7 @@ showAccounts() {
         jq -r -c '.inbounds[]|select(.type=="tuic")|.users[]' "${singBoxConfigPath}config.json" | while read -r user; do
             echoContent skyBlue "\n ---> 账号:$(echo "${user}" | jq -r .name)"
             echo
-            defaultBase64Code tuic "$(echo "${user}" | jq -r .name)" "$(echo "${user}" | jq -r .uuid)"
+            defaultBase64Code tuic "$(echo "${user}" | jq -r .name)" "$(echo "${user}" | jq -r .uuid)_$(echo "${user}" | jq -r .password)"
         done
 
     fi
@@ -6348,7 +6354,6 @@ EOF
 
         echoContent green " ---> WARP分流卸载成功"
     fi
-
     # sing-box
     if [[ -n "${singBoxConfigPath}" ]]; then
         removeSingBoxRouteRule "wireguard_out_${type}"
@@ -6457,6 +6462,7 @@ EOF
     elif [[ "${warpStatus}" == "4" ]]; then
 
         removeWireGuardRoute "${type}"
+        removeSingBoxOutbound "wireguard_out_${type}"
     else
         echoContent red " ---> 选择错误"
         exit 0
@@ -8477,7 +8483,7 @@ menu() {
     cd "$HOME" || exit
     echoContent red "\n=============================================================="
     echoContent green "作者：mack-a"
-    echoContent green "当前版本：v2.11.15"
+    echoContent green "当前版本：v2.11.17"
     echoContent green "Github：https://github.com/mack-a/v2ray-agent"
     echoContent green "描述：八合一共存脚本\c"
     showInstallStatus
