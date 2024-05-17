@@ -848,8 +848,8 @@ readConfigHostPathUUID() {
             currentPath=${currentPath::-2}
         fi
     fi
-    if [[ -f "/etc/v2ray-agent/cdn" ]] && grep -q "address" "/etc/v2ray-agent/cdn"; then
-        currentCDNAddress=$(grep "address" "/etc/v2ray-agent/cdn" | awk -F "[:]" '{print $2}')
+    if [[ -f "/etc/v2ray-agent/cdn" ]] && [[ -n "$(head -1 /etc/v2ray-agent/cdn)" ]]; then
+        currentCDNAddress=$(head -1 /etc/v2ray-agent/cdn)
     else
         currentCDNAddress="${currentHost}"
     fi
@@ -1405,12 +1405,6 @@ server {
 	client_header_timeout 1071906480m;
     keepalive_timeout 1071906480m;
 
-	location ~ ^/s/(clashMeta|default|clashMetaProfiles|sing-box|sing-box_profiles)/(.*) {
-	    proxy_set_header X-Real-IP \$proxy_protocol_addr;
-        default_type 'text/plain; charset=utf-8';
-        alias /etc/v2ray-agent/subscribe/\$1/\$2;
-    }
-
     location /${currentPath}grpc {
     	if (\$content_type !~ "application/grpc") {
     		return 404;
@@ -1446,11 +1440,7 @@ server {
 
 	server_name ${domain};
 	root ${nginxStaticPath};
-	location ~ ^/s/(clashMeta|default|clashMetaProfiles|sing-box|sing-box_profiles)/(.*) {
-	    proxy_set_header X-Real-IP \$proxy_protocol_addr;
-        default_type 'text/plain; charset=utf-8';
-        alias /etc/v2ray-agent/subscribe/\$1/\$2;
-    }
+
 	location /${currentPath}grpc {
 		client_max_body_size 0;
 		keepalive_requests 4294967296;
@@ -1461,6 +1451,8 @@ server {
  		grpc_send_timeout 1071906480m;
 		grpc_pass grpc://127.0.0.1:31301;
 	}
+	location / {
+    }
 }
 EOF
 
@@ -1474,11 +1466,7 @@ server {
 
     server_name ${domain};
 	root ${nginxStaticPath};
-	location ~ ^/s/(clashMeta|default|clashMetaProfiles|sing-box|sing-box_profiles)/(.*) {
-	    proxy_set_header X-Real-IP \$proxy_protocol_addr;
-        default_type 'text/plain; charset=utf-8';
-        alias /etc/v2ray-agent/subscribe/\$1/\$2;
-    }
+
 	location /${currentPath}trojangrpc {
 		client_max_body_size 0;
 		# keepalive_time 1071906480m;
@@ -1490,6 +1478,8 @@ server {
  		grpc_send_timeout 1071906480m;
 		grpc_pass grpc://127.0.0.1:31301;
 	}
+	location / {
+    }
 }
 EOF
     else
@@ -1504,11 +1494,6 @@ server {
 	server_name ${domain};
 	root ${nginxStaticPath};
 
-    location ~ ^/s/(clashMeta|default|clashMetaProfiles|sing-box|sing-box_profiles)/(.*) {
-        proxy_set_header X-Real-IP \$proxy_protocol_addr;
-        default_type 'text/plain; charset=utf-8';
-        alias /etc/v2ray-agent/subscribe/\$1/\$2;
-    }
 	location / {
 	}
 }
@@ -1524,11 +1509,6 @@ server {
 	real_ip_header proxy_protocol;
 
 	root ${nginxStaticPath};
-	location ~ ^/s/(clashMeta|default|clashMetaProfiles|sing-box|sing-box_profiles)/(.*) {
-        proxy_set_header X-Real-IP \$proxy_protocol_addr;
-        default_type 'text/plain; charset=utf-8';
-        alias /etc/v2ray-agent/subscribe/\$1/\$2;
-    }
 	location / {
 	}
 }
@@ -5606,9 +5586,6 @@ unInstall() {
 manageCDN() {
     echoContent skyBlue "\n进度 $1/1 : CDN节点管理"
     local setCDNDomain=
-    if [[ ! -f "/etc/v2ray-agent/cdn" ]]; then
-        touch "/etc/v2ray-agent/cdn"
-    fi
 
     if echo "${currentInstallProtocolType}" | grep -qE ",1,|,2,|,3,|,5,"; then
         echoContent red "=============================================================="
@@ -5642,15 +5619,15 @@ manageCDN() {
             read -r -p "请输入想要自定义CDN IP或者域名:" setCDNDomain
             ;;
         6)
-            sed -i "1d" "/etc/v2ray-agent/cdn"
+            echo >/etc/v2ray-agent/cdn
             echoContent green " ---> 移除成功"
             exit 0
             ;;
         esac
 
         if [[ -n "${setCDNDomain}" ]]; then
-            sed -i "1d" "/etc/v2ray-agent/cdn"
-            test -s "/etc/v2ray-agent/cdn" && sed -i "1i address:${setCDNDomain}" "/etc/v2ray-agent/cdn" || echo "address:${setCDNDomain}" >"/etc/v2ray-agent/cdn"
+            echo >/etc/v2ray-agent/cdn
+            echo "${setCDNDomain}" >"/etc/v2ray-agent/cdn"
             echoContent green " ---> 修改CDN成功，重新查看用户管理或者订阅后生成新的节点内容"
         else
             echoContent red " ---> 不可以为空，请重新输入"
@@ -7172,6 +7149,13 @@ setSocks5InboundRouting() {
 
     read -r -p "是否允许所有网站？请选择[y/n]:" socks5InboundRoutingDomainStatus
     if [[ "${socks5InboundRoutingDomainStatus}" == "y" ]]; then
+        addSingBoxRouteRule "01_direct_outbound" "" "socks5_inbound_route"
+        local route=
+        route=$(jq ".route.rules[0].inbound = [\"socks5_inbound\"]" "${singBoxConfigPath}socks5_inbound_route.json")
+        route=$(echo "${route}" | jq ".route.rules[0].source_ip_cidr=${socks5InboundRoutingIPs}")
+        echo "${route}" | jq . >"${singBoxConfigPath}socks5_inbound_route.json"
+
+        addSingBoxOutbound block
         addSingBoxOutbound "01_direct_outbound"
     else
         echoContent yellow "录入示例:netflix,openai,v2ray-agent.com\n"
@@ -8098,6 +8082,8 @@ server {
         default_type 'text/plain; charset=utf-8';
         alias /etc/v2ray-agent/subscribe/\$1/\$2;
     }
+    location / {
+    }
 }
 EOF
         bootStartup nginx
@@ -8539,9 +8525,7 @@ initRandomSalt() {
 # 订阅
 subscribe() {
     readInstallProtocolType
-    if [[ "${coreInstallType}" == "1" ]] && [[ "${selectCustomInstallType}" == ",7," || "${currentInstallProtocolType}" == ",7,8," ]] || [[ "${coreInstallType}" == "2" ]]; then
-        installSubscribe
-    fi
+    installSubscribe
 
     readNginxSubscribe
     if [[ "${coreInstallType}" == "1" || "${coreInstallType}" == "2" ]]; then
@@ -8830,9 +8814,9 @@ initRealityClientServersName() {
         if [[ "${realityServerNameCurrentDomainStatus}" == "y" ]]; then
             realityServerName="${domain}"
             if [[ "${selectCoreType}" == "1" ]]; then
-                if [[ -n "${port}" ]]; then
-                    realityDomainPort="${port}"
-                elif [[ -z "${subscribePort}" ]]; then
+                #                if [[ -n "${port}" ]]; then
+                #                    realityDomainPort="${port}"
+                if [[ -z "${subscribePort}" ]]; then
                     echo
                     installSubscribe
                     readNginxSubscribe
@@ -9174,7 +9158,7 @@ menu() {
     cd "$HOME" || exit
     echoContent red "\n=============================================================="
     echoContent green "作者：mack-a"
-    echoContent green "当前版本：v3.2.50"
+    echoContent green "当前版本：v3.2.52"
     echoContent green "Github：https://github.com/mack-a/v2ray-agent"
     echoContent green "描述：八合一共存脚本\c"
     showInstallStatus
