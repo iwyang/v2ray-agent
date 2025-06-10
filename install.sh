@@ -58,6 +58,12 @@ checkSystem() {
         removeType='yum -y remove'
         upgrade="yum update -y --skip-broken"
         checkCentosSELinux
+    elif { [[ -f "/etc/issue" ]] && grep -qi "Alpine" /etc/issue; } || { [[ -f "/proc/version" ]] && grep -qi "Alpine" /proc/version; }; then
+        release="alpine"
+        installType='apk add'
+        upgrade="apk update"
+        removeType='apk del'
+        nginxConfigPath=/etc/nginx/http.d/
     elif { [[ -f "/etc/issue" ]] && grep -qi "debian" /etc/issue; } || { [[ -f "/proc/version" ]] && grep -qi "debian" /proc/version; } || { [[ -f "/etc/os-release" ]] && grep -qi "ID=debian" /etc/issue; }; then
         release="debian"
         installType='apt -y install'
@@ -74,12 +80,6 @@ checkSystem() {
         if grep </etc/issue -q -i "16."; then
             release=
         fi
-    elif { [[ -f "/etc/issue" ]] && grep -qi "Alpine" /etc/issue; } || { [[ -f "/proc/version" ]] && grep -qi "Alpine" /proc/version; }; then
-        release="alpine"
-        installType='apk add'
-        upgrade="apk update"
-        removeType='apk del'
-        nginxConfigPath=/etc/nginx/http.d/
     fi
 
     if [[ -z ${release} ]]; then
@@ -594,7 +594,7 @@ checkBTPanel() {
             fi
 
             if [[ -n "${selectBTDomain}" ]]; then
-                btDomain=$(find /www/server/panel/vhost/cert/*/fullchain.pem | awk -F "[/]" '{print $7}' | awk '{print NR""":"$0}' | grep "${selectBTDomain}:" | cut -d ":" -f 2)
+                btDomain=$(find /www/server/panel/vhost/cert/*/fullchain.pem | awk -F "[/]" '{print $7}' | awk '{print NR""":"$0}' | grep -e "^${selectBTDomain}:" | cut -d ":" -f 2)
 
                 if [[ -z "${btDomain}" ]]; then
                     echoContent red " ---> 选择错误，请重新选择"
@@ -1106,6 +1106,11 @@ installTools() {
     if ! find /usr/bin /usr/sbin | grep -q -w binutils; then
         echoContent green " ---> 安装binutils"
         ${installType} binutils >/dev/null 2>&1
+    fi
+
+    if ! find /usr/bin /usr/sbin | grep -q -w openssl; then
+        echoContent green " ---> 安装openssl"
+        ${installType} openssl >/dev/null 2>&1
     fi
 
     if ! find /usr/bin /usr/sbin | grep -q -w ping6; then
@@ -9699,7 +9704,7 @@ menu() {
     cd "$HOME" || exit
     echoContent red "\n=============================================================="
     echoContent green "作者：mack-a"
-    echoContent green "当前版本：v3.4.13"
+    echoContent green "当前版本：v3.4.14"
     echoContent green "Github：https://github.com/mack-a/v2ray-agent"
     echoContent green "描述：八合一共存脚本\c"
     showInstallStatus
