@@ -509,17 +509,17 @@ readInstallProtocolType() {
         if echo "${row}" | grep -q VLESS_vision_reality_inbounds; then
             currentInstallProtocolType="${currentInstallProtocolType}7,"
             if [[ "${coreInstallType}" == "1" ]]; then
-                xrayVLESSRealityServerName=$(jq -r .inbounds[0].streamSettings.realitySettings.serverNames[0] "${row}.json")
+                xrayVLESSRealityServerName=$(jq -r .inbounds[1].streamSettings.realitySettings.serverNames[0] "${row}.json")
                 realityServerName=${xrayVLESSRealityServerName}
                 xrayVLESSRealityPort=$(jq -r .inbounds[0].port "${row}.json")
 
-                realityDomainPort=$(jq -r .inbounds[0].streamSettings.realitySettings.dest "${row}.json" | awk -F '[:]' '{print $2}')
+                realityDomainPort=$(jq -r .inbounds[1].streamSettings.realitySettings.target "${row}.json" | awk -F '[:]' '{print $2}')
 
-                currentRealityPublicKey=$(jq -r .inbounds[0].streamSettings.realitySettings.publicKey "${row}.json")
-                currentRealityPrivateKey=$(jq -r .inbounds[0].streamSettings.realitySettings.privateKey "${row}.json")
+                currentRealityPublicKey=$(jq -r .inbounds[1].streamSettings.realitySettings.publicKey "${row}.json")
+                currentRealityPrivateKey=$(jq -r .inbounds[1].streamSettings.realitySettings.privateKey "${row}.json")
 
-                currentRealityMldsa65Seed=$(jq -r .inbounds[0].streamSettings.realitySettings.mldsa65Seed "${row}.json")
-                currentRealityMldsa65Verify=$(jq -r .inbounds[0].streamSettings.realitySettings.mldsa65Verify "${row}.json")
+                currentRealityMldsa65Seed=$(jq -r .inbounds[1].streamSettings.realitySettings.mldsa65Seed "${row}.json")
+                currentRealityMldsa65Verify=$(jq -r .inbounds[1].streamSettings.realitySettings.mldsa65Verify "${row}.json")
 
                 frontingTypeReality=07_VLESS_vision_reality_inbounds
 
@@ -1010,7 +1010,7 @@ showInstallStatus() {
             echoContent yellow "VMess+TLS+HTTPUpgrade \c"
         fi
         if echo ${currentInstallProtocolType} | grep -q ",12,"; then
-            echoContent yellow "VLESS+XHTTP \c"
+            echoContent yellow "VLESS+Reality+XHTTP \c"
         fi
         if echo ${currentInstallProtocolType} | grep -q ",13,"; then
             echoContent yellow "AnyTLS \c"
@@ -2779,7 +2779,7 @@ initXrayClients() {
         fi
         # VLESS XHTTP
         if echo "${type}" | grep -q ",12,"; then
-            currentUser="{\"id\":\"${uuid}\",\"email\":\"${email}-VLESS_XHTTP\"}"
+            currentUser="{\"id\":\"${uuid}\",\"email\":\"${email}-VLESS_Reality_XHTTP\"}"
             users=$(echo "${users}" | jq -r ". +=[${currentUser}]")
         fi
         # trojan grpc
@@ -3967,7 +3967,7 @@ EOF
     elif [[ -z "$3" ]]; then
         rm /etc/v2ray-agent/xray/conf/03_VLESS_WS_inbounds.json >/dev/null 2>&1
     fi
-    # VLESS_XHTTP_TLS
+    # VLESS_Reality_XHTTP_TLS
     if echo "${selectCustomInstallType}" | grep -q ",12," || [[ "$1" == "all" ]]; then
         initXrayXHTTPort
         initRealityClientServersName
@@ -3990,7 +3990,7 @@ EOF
 		"security": "reality",
 		"realitySettings": {
             "show": false,
-            "dest": "${realityServerName}:${realityDomainPort}",
+            "target": "${realityServerName}:${realityDomainPort}",
             "xver": 0,
             "serverNames": [
                 "${realityServerName}"
@@ -4016,42 +4016,6 @@ EOF
     elif [[ -z "$3" ]]; then
         rm /etc/v2ray-agent/xray/conf/12_VLESS_XHTTP_inbounds.json >/dev/null 2>&1
     fi
-    # trojan_grpc
-    #    if echo "${selectCustomInstallType}" | grep -q ",2," || [[ "$1" == "all" ]]; then
-    #        if ! echo "${selectCustomInstallType}" | grep -q ",5," && [[ -n ${selectCustomInstallType} ]]; then
-    #            fallbacksList=${fallbacksList//31302/31304}
-    #        fi
-    #        cat <<EOF >/etc/v2ray-agent/xray/conf/04_trojan_gRPC_inbounds.json
-    #{
-    #    "inbounds": [
-    #        {
-    #            "port": 31304,
-    #            "listen": "127.0.0.1",
-    #            "protocol": "trojan",
-    #            "tag": "trojangRPCTCP",
-    #            "settings": {
-    #                "clients": $(initXrayClients 2),
-    #                "fallbacks": [
-    #                    {
-    #                        "dest": "31300"
-    #                    }
-    #                ]
-    #            },
-    #            "streamSettings": {
-    #                "network": "grpc",
-    #                "grpcSettings": {
-    #                    "serviceName": "${customPath}trojangrpc"
-    #                }
-    #            }
-    #        }
-    #    ]
-    #}
-    #EOF
-    #    elif [[ -z "$3" ]]; then
-    #        rm /etc/v2ray-agent/xray/conf/04_trojan_gRPC_inbounds.json >/dev/null 2>&1
-    #    fi
-
-    # VMess_WS
     if echo "${selectCustomInstallType}" | grep -q ",3," || [[ "$1" == "all" ]]; then
         fallbacksList=${fallbacksList}',{"path":"/'${customPath}'vws","dest":31299,"xver":1}'
         cat <<EOF >/etc/v2ray-agent/xray/conf/05_VMess_WS_inbounds.json
@@ -4157,50 +4121,93 @@ EOF
         initRealityClientServersName
         initRealityKey
         initRealityMldsa65
-
         cat <<EOF >/etc/v2ray-agent/xray/conf/07_VLESS_vision_reality_inbounds.json
 {
   "inbounds": [
     {
+      "tag": "dokodemo-in-VLESSReality",
       "port": ${realityPort},
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1",
+        "port": 45987,
+        "network": "tcp"
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "tls"
+        ],
+        "routeOnly": true
+      }
+    },
+    {
+      "listen": "127.0.0.1",
+      "port": 45987,
       "protocol": "vless",
-      "tag": "VLESSReality",
       "settings": {
         "clients": $(initXrayClients 7),
         "decryption": "none",
         "fallbacks":[
-            {
-                "dest": "31305",
-                "xver": 1
-            }
+          {
+            "dest": "31305",
+            "xver": 1
+          }
         ]
       },
       "streamSettings": {
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-            "show": false,
-            "dest": "${realityServerName}:${realityDomainPort}",
-            "xver": 0,
-            "serverNames": [
-                "${realityServerName}"
-            ],
-            "privateKey": "${realityPrivateKey}",
-            "publicKey": "${realityPublicKey}",
-            "mldsa65Seed": "${realityMldsa65Seed}",
-            "mldsa65Verify": "${realityMldsa65Verify}",
-            "maxTimeDiff": 70000,
-            "shortIds": [
-                "",
-                "6ba85179e30d4fc2"
-            ]
+          "show": false,
+          "target": "${realityServerName}:${realityDomainPort}",
+          "xver": 0,
+          "serverNames": [
+            "${realityServerName}"
+          ],
+          "privateKey": "${realityPrivateKey}",
+          "publicKey": "${realityPublicKey}",
+          "mldsa65Seed": "${realityMldsa65Seed}",
+          "mldsa65Verify": "${realityMldsa65Verify}",
+          "maxTimeDiff": 70000,
+          "shortIds": [
+            "",
+            "6ba85179e30d4fc2"
+          ]
         }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "routeOnly": true
       }
     }
-  ]
+  ],
+  "routing": {
+    "rules": [
+      {
+        "inboundTag": [
+          "dokodemo-in"
+        ],
+        "domain": [
+          "${realityServerName}"
+        ],
+        "outboundTag": "z_direct_outbound"
+      },
+      {
+        "inboundTag": [
+          "dokodemo-in"
+        ],
+        "outboundTag": "blackhole_out"
+      }
+    ]
+  }
 }
 EOF
-
         cat <<EOF >/etc/v2ray-agent/xray/conf/08_VLESS_vision_gRPC_inbounds.json
 {
   "inbounds": [
@@ -4244,6 +4251,7 @@ EOF
         removeXrayOutbound wireguard_out_IPv6
         removeXrayOutbound wireguard_out_IPv4
         addXrayOutbound z_direct_outbound
+        addXrayOutbound blackhole_out
     fi
 }
 
@@ -4853,7 +4861,7 @@ EOF
 vless://${id}@$(getPublicIP):${port}?encryption=none&security=reality&type=xhttp&sni=${xrayVLESSRealityXHTTPServerName}&fp=chrome&path=${path}&pbk=${currentRealityXHTTPPublicKey}&sid=6ba85179e30d4fc2#${email}
 EOF
         echoContent yellow " ---> 二维码 VLESS(VLESS+reality+XHTTP)"
-        echoContent green "    https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=vless%3A%2F%2F${id}%40$(getPublicIP)%3A${port}%3Fencryption%3Dnone%26security%3Dreality%26type%3Dtcp%26sni%3D${xrayVLESSRealityXHTTPServerName}%26fp%3Dchrome%26path%3D${path}%26host%3D${xrayVLESSRealityXHTTPServerName}%26pbk%3D${currentRealityXHTTPPublicKey}%26sid%3D6ba85179e30d4fc2%23${email}\n"
+        echoContent green "    https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=vless%3A%2F%2F${id}%40$(getPublicIP)%3A${port}%3Fencryption%3Dnone%26security%3Dreality%26type%3Dxhttp%26sni%3D${xrayVLESSRealityXHTTPServerName}%26fp%3Dchrome%26path%3D${path}%26host%3D${xrayVLESSRealityXHTTPServerName}%26pbk%3D${currentRealityXHTTPPublicKey}%26sid%3D6ba85179e30d4fc2%23${email}\n"
 
     elif
         [[ "${type}" == "vlessgrpc" ]]
@@ -5344,7 +5352,7 @@ showAccounts() {
     # VLESS reality vision
     if echo ${currentInstallProtocolType} | grep -q ",7,"; then
         echoContent skyBlue "============================= VLESS reality_vision [推荐]  ==============================\n"
-        jq .inbounds[0].settings.clients//.inbounds[0].users ${configPath}07_VLESS_vision_reality_inbounds.json | jq -c '.[]' | while read -r user; do
+        jq .inbounds[1].settings.clients//.inbounds[0].users ${configPath}07_VLESS_vision_reality_inbounds.json | jq -c '.[]' | while read -r user; do
             local email=
             email=$(echo "${user}" | jq -r .email//.name)
 
@@ -5419,9 +5427,9 @@ showAccounts() {
             done < <(echo "${currentCDNAddress}" | tr ',' '\n')
         done
     fi
-    # VLESS XHTTP
+    # VLESS Reality XHTTP
     if echo ${currentInstallProtocolType} | grep -q ",12,"; then
-        echoContent skyBlue "\n================================ VLESS XHTTP TLS [仅CDN推荐] ================================\n"
+        echoContent skyBlue "\n================================ VLESS Reality XHTTP TLS [仅CDN推荐] ================================\n"
 
         jq .inbounds[0].settings.clients//.inbounds[0].users ${configPath}12_VLESS_XHTTP_inbounds.json | jq -c '.[]' | while read -r user; do
             local email=
@@ -6392,7 +6400,7 @@ ipv6Routing() {
 
         read -r -p "请按照上面示例录入域名:" domainList
         if [[ "${coreInstallType}" == "1" ]]; then
-            addInstallRouting IPv6_out outboundTag "${domainList}"
+            addXrayRouting IPv6_out outboundTag "${domainList}"
             addXrayOutbound IPv6_out
         fi
 
@@ -6603,7 +6611,7 @@ blacklist() {
         echoContent yellow "5.添加规则为增量配置，不会删除之前设置的内容\n"
         read -r -p "请按照上面示例录入域名:" domainList
         if [[ "${coreInstallType}" == "1" ]]; then
-            addInstallRouting blackhole_out outboundTag "${domainList}"
+            addXrayRouting blackhole_out outboundTag "${domainList}"
             addXrayOutbound blackhole_out
         fi
 
@@ -6619,7 +6627,7 @@ blacklist() {
         if [[ "${coreInstallType}" == "1" ]]; then
             unInstallRouting blackhole_out outboundTag
 
-            addInstallRouting blackhole_out outboundTag "cn"
+            addXrayRouting blackhole_out outboundTag "cn"
 
             addXrayOutbound blackhole_out
         fi
@@ -6658,7 +6666,7 @@ blacklist() {
     reloadCore
 }
 # 添加routing配置
-addInstallRouting() {
+addXrayRouting() {
 
     local tag=$1    # warp-socks
     local type=$2   # outboundTag/inboundTag
@@ -6838,7 +6846,7 @@ addWireGuardRoute() {
     # xray
     if [[ "${coreInstallType}" == "1" ]]; then
 
-        addInstallRouting "wireguard_out_${type}" "${tag}" "${domainList}"
+        addXrayRouting "wireguard_out_${type}" "${tag}" "${domainList}"
         addXrayOutbound "wireguard_out_${type}"
     fi
     # sing-box
@@ -7602,7 +7610,7 @@ setVMessWSRoutingOutbounds() {
             setVMessWSTLSPath="/${setVMessWSTLSPath}"
         fi
         addXrayOutbound "VMess-out"
-        addInstallRouting VMess-out outboundTag "${domainList}"
+        addXrayRouting VMess-out outboundTag "${domainList}"
         reloadCore
         echoContent green " ---> 添加分流成功"
         exit 0
@@ -8015,7 +8023,7 @@ customXrayInstall() {
     echoContent yellow "5.VLESS+TLS+gRPC[仅CDN推荐]"
     echoContent yellow "7.VLESS+Reality+uTLS+Vision[推荐]"
     # echoContent yellow "8.VLESS+Reality+gRPC"
-    echoContent yellow "12.VLESS+XHTTP+TLS"
+    echoContent yellow "12.VLESS+Reality+XHTTP+TLS"
     read -r -p "请选择[多选]，[例如:1,2,3]:" selectCustomInstallType
     echoContent skyBlue "--------------------------------------------------------------"
     if echo "${selectCustomInstallType}" | grep -q "，"; then
@@ -9504,7 +9512,7 @@ menu() {
     cd "$HOME" || exit
     echoContent red "\n=============================================================="
     echoContent green "作者：mack-a"
-    echoContent green "当前版本：v3.4.33"
+    echoContent green "当前版本：v3.4.35"
     echoContent green "Github：https://github.com/mack-a/v2ray-agent"
     echoContent green "描述：八合一共存脚本\c"
     showInstallStatus
@@ -9518,6 +9526,7 @@ menu() {
     echoContent yellow "优质常驻套餐DMIT CN2-GIA"
     echoContent green "https://www.v2ray-agent.com/archives/186cee7b-9459-4e57-b9b2-b07a4f36931c"
     echoContent yellow "VPS探针：https://ping.v2ray-agent.com/"
+    echoContent red "                                              "
     echoContent red "=============================================================="
     if [[ -n "${coreInstallType}" ]]; then
         echoContent yellow "1.重新安装"
