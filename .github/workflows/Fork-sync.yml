@@ -2,25 +2,18 @@ name: Scheduled Repo Sync
 
 on:
   schedule:
-    # 每天 UTC 时间 00:00（北京时间 08:00）执行
     - cron: '0 0 * * *'
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
+
+permissions:
+  contents: write # 自动赋予仓库写入权限
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout target repo
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Sync with Upstream
+      - name: Sync Fork with Upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote add upstream https://github.com/mack-a/v2ray-agent.git
-          git fetch upstream
-          git checkout main
-          git merge upstream/main --ff-only
-          git push origin main
+          gh repo sync "${{ github.repository }}" --force
